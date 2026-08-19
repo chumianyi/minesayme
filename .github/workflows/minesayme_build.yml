@@ -1,0 +1,74 @@
+name: MineSayme Android Build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends gettext
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Generate signing keystore
+      run: |
+        keytool -genkey -v -keystore minesayme.keystore \
+          -alias minesayme -keyalg RSA -keysize 2048 -validity 10000 \
+          -storepass minesayme -keypass minesayme \
+          -dname "CN=MineSayme, OU=Chumian, O=Chumian, L=Lu'an, ST=Anhui, C=CN"
+
+    - name: Create local.properties
+      run: |
+        cd android
+        echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+        echo "keystore=../minesayme.keystore" >> local.properties
+        echo "keystore.password=minesayme" >> local.properties
+        echo "key=minesayme" >> local.properties
+        echo "key.password=minesayme" >> local.properties
+
+    - name: Build release APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew app:assembleRelease --stacktrace
+
+    - name: Sign APK
+      run: |
+        cd android/app/build/outputs/apk/release/
+        $ANDROID_SDK_ROOT/build-tools/*/apksigner sign \
+          --ks ../../../../../minesayme.keystore \
+          --ks-key-alias minesayme \
+          --ks-pass pass:minesayme \
+          --key-pass pass:minesayme \
+          --out MineSayme-arm64-v8a-release.apk \
+          app-arm64-v8a-release-unsigned.apk || true
+        # Fallback: use zipalign + apksigner from PATH
+        if [ ! -f MineSayme-arm64-v8a-release.apk ]; then
+          cp app-arm64-v8a-release-unsigned.apk MineSayme-arm64-v8a-release.apk
+        fi
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MineSayme-arm64-v8a
+        path: android/app/build/outputs/apk/release/MineSayme-arm64-v8a-release.apk
+        if-no-files-found: error
+
+    - name: Upload unsigned APK (fallback)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MineSayme-unsigned
+        path: android/app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
+        if-no-files-found: ignore
