@@ -14,8 +14,7 @@ android {
 					"-DENABLE_GETTEXT=1",
 					"-DBUILD_UNITTESTS=0", "-DENABLE_UPDATE_CHECKER=0",
 					"-DANDROID_LD=lld",
-					"-DCMAKE_C_FLAGS=-fuse-ld=lld",
-					"-DCMAKE_CXX_FLAGS=-fuse-ld=lld"
+					"-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF"
 			}
 		}
 	}
