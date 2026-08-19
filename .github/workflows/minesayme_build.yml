@@ -22,12 +22,18 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Generate signing keystore
+    - name: Install Android NDK
       run: |
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "ndk;29.0.14206865" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" "platform-tools"
+
+    - name: Prepare signing keystore
+      run: |
+        rm -f minesayme.keystore
         keytool -genkey -v -keystore minesayme.keystore \
           -alias minesayme -keyalg RSA -keysize 2048 -validity 10000 \
           -storepass minesayme -keypass minesayme \
-          -dname "CN=MineSayme, OU=Chumian, O=Chumian, L=Lu'an, ST=Anhui, C=CN"
+          -dname "CN=MineSayme, OU=Chumian, O=Chumian, L=Liuan, ST=Anhui, C=CN"
 
     - name: Create local.properties
       run: |
@@ -47,16 +53,18 @@ jobs:
     - name: Sign APK
       run: |
         cd android/app/build/outputs/apk/release/
-        $ANDROID_SDK_ROOT/build-tools/*/apksigner sign \
-          --ks ../../../../../minesayme.keystore \
-          --ks-key-alias minesayme \
-          --ks-pass pass:minesayme \
-          --key-pass pass:minesayme \
-          --out MineSayme-arm64-v8a-release.apk \
-          app-arm64-v8a-release-unsigned.apk || true
-        # Fallback: use zipalign + apksigner from PATH
-        if [ ! -f MineSayme-arm64-v8a-release.apk ]; then
-          cp app-arm64-v8a-release-unsigned.apk MineSayme-arm64-v8a-release.apk
+        UNSIGNED=$(ls app-*-release-unsigned.apk 2>/dev/null | head -1)
+        if [ -n "$UNSIGNED" ]; then
+          $ANDROID_SDK_ROOT/build-tools/*/apksigner sign \
+            --ks ../../../../../minesayme.keystore \
+            --ks-key-alias minesayme \
+            --ks-pass pass:minesayme \
+            --key-pass pass:minesayme \
+            --out MineSayme-arm64-v8a-release.apk \
+            "$UNSIGNED" || cp "$UNSIGNED" MineSayme-arm64-v8a-release.apk
+        else
+          echo "No unsigned APK found, listing directory:"
+          ls -la
         fi
 
     - name: Upload APK artifact
@@ -66,9 +74,9 @@ jobs:
         path: android/app/build/outputs/apk/release/MineSayme-arm64-v8a-release.apk
         if-no-files-found: error
 
-    - name: Upload unsigned APK (fallback)
+    - name: Upload all APK outputs
       uses: actions/upload-artifact@v4
       with:
-        name: MineSayme-unsigned
-        path: android/app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
+        name: MineSayme-all-apks
+        path: android/app/build/outputs/apk/release/*.apk
         if-no-files-found: ignore
